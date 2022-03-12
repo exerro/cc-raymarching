@@ -1,10 +1,9 @@
 
-local df = require "df"
-
 local abs = math.abs
 local atan = math.atan
 local cos = math.cos
 local floor = math.floor
+local max = math.max
 local min = math.min
 local sin = math.sin
 local sqrt = math.sqrt
@@ -37,18 +36,82 @@ local camera_rh = 0
 local camera_rv = 0
 local camera_fov = math.rad(70)
 
+local function df_sphere(radius)
+	return function(x, y, z)
+		return sqrt(x * x + y * y + z * z) - radius
+	end
+end
+
+local function df_box(w, h, d)
+	return function(x, y, z)
+		local qx = abs(x) - w
+		local qy = abs(y) - h
+		local qz = abs(z) - d
+
+		local qx0 = max(qx, 0)
+		local qy0 = max(qy, 0)
+		local qz0 = max(qz, 0)
+
+		return sqrt(qx0 * qx0 + qy0 * qy0 + qz0 * qz0) + min(max(qx, max(qy, qz)), 0)
+	end
+end
+
+local function df_union(a, b, ...)
+	if ... then
+		return df_union(a, df_union(b, ...))
+	end
+
+	return function(x, y, z)
+		return min(a(x, y, z), b(x, y, z))
+	end
+end
+
+local function df_intersection(a, b, ...)
+	if ... then
+		return df_intersection(a, df_intersection(b, ...))
+	end
+
+	return function(x, y, z)
+		return max(a(x, y, z), b(x, y, z))
+	end
+end
+
+local function df_smooth_union(k, a, b)
+	return function(x, y, z)
+		local ad = a(x, y, z)
+		local bd = b(x, y, z)
+		local h = max(0, min(1, 0.5 + 0.5 * (bd - ad) / k))
+    	return bd * (1 - h) + ad * h - k * h * (1 - h)
+	end
+end
+
+local function df_inf_repeat(s, wx, wy, wz)
+	return function(x, y, z)
+		local qx = (x + 0.5 * wx) % wx - 0.5 * wx
+		local qy = (y + 0.5 * wy) % wy - 0.5 * wy
+		local qz = (z + 0.5 * wz) % wz - 0.5 * wz
+    	return s(qx, qy, qz);
+	end
+end
+
+local function df_translate(s, dx, dy, dz)
+	return function(x, y, z)
+		return s(x - dx, y - dy, z - dz)
+	end
+end
+
 local function get_distance_function(t)
 	local s = 1.5 + sin(t) * 0.5
-	return df.union(
-		df.translate(df.sphere(1), 1, 0, 0),
-		df.smooth_union(
+	return df_union(
+		df_translate(df_sphere(1), 1, 0, 0),
+		df_smooth_union(
 			0.5,
-			df.translate(df.sphere(s), -1 - (s - 1) * 0.5, 0, 0),
-			df.translate(df.box(2, 1, 1), 0, 1, -2)
+			df_translate(df_sphere(s), -1 - (s - 1) * 0.5, 0, 0),
+			df_translate(df_box(2, 1, 1), 0, 1, -2)
 		),
-		df.translate(df.intersection(
-			df.box(0.8, 0.8, 0.8),
-			df.sphere(1)
+		df_translate(df_intersection(
+			df_box(0.8, 0.8, 0.8),
+			df_sphere(1)
 		), 3, 0, 0)
 	)
 end
