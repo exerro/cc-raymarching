@@ -452,32 +452,31 @@ end
 
 local function render()
 	local w, h = term.getSize()
-	-- local w, h = 50, 20
 
 	render_to_framebuffer(get_distance_function(os.clock()), w, h)
 	render_framebuffer(w, h)
 end
 
--- render_to_framebuffer(distance_function, 10, 10)
+local currentTime = os.clock
+local fps = 0
 
--- for y = 1, 10 do
--- 	local line = {}
-
--- 	for x = 1, 10 do
--- 		local px = framebuffer[(y - 1) * 10 * SUBPIXEL_H * SUBPIXEL_W + (x - 1) * SUBPIXEL_W + 1]
-
--- 		if px == 0 then
--- 			line[x] = " "
--- 		else
--- 			line[x] = "@"
--- 		end
--- 	end
-
--- 	print(table.concat(line))
--- end
+if ccemux then
+	local nanoTime = ccemux.nanoTime
+	function currentTime()
+		return nanoTime() / 1000000000
+	end
+end
 
 while true do
+	local start = currentTime()
 	render()
+	local dt = currentTime() - start
+
+	fps = (fps * 3 + 1/dt) / 4
+	term.setCursorPos(1, 1)
+	term.setBackgroundColour(1)
+	term.setTextColour(32768)
+	term.write(string.format("~%.1f fps", fps))
 	os.queueEvent "render"
 
 	while true do
